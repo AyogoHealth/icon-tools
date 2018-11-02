@@ -1,0 +1,210 @@
+#!/bin/bash
+# Copyright 2018 Ayogo Health Inc.
+
+INKSCAPE='inkscape'
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    INKSCAPE='/Applications/Inkscape.app/Contents/MacOS/inkscape'
+fi
+
+
+WITH_ANDROID=1
+WITH_IOS=1
+WITH_WEB=0 # Not implemented yet
+
+SIZES=(
+    icon-20:20:white
+    icon-20-2x:40:white
+    icon-20-3x:60:white
+    icon-40:40:white
+    icon-40-2x:80:white
+    icon-50:50:white
+    icon-50-2x:100:white
+    icon-60-2x:120
+    icon-60-3x:180
+    icon-72:72
+    icon-72-2x:144
+    icon-76:76
+    icon-76-2x:152
+    icon-83.5-2x:167
+    icon-1024:1024
+    icon-29:29:white
+    icon-29-2x:58:white
+    icon-29-3x:87:white
+    icon:57
+    icon-2x:114
+    icon-24-2x:48:white
+    icon-27.5-2x:55:white
+    icon-44-2x:88:white
+    icon-86-2x:172:white
+    icon-98-2x:196:white
+)
+
+DENSITIES=(icon-ldpi:36 icon-mdpi:48 icon-hdpi:72 icon-xhdpi:96 icon-xxhdpi:144 icon-xxxhdpi:192 store:512)
+#FAVICONS=(icon-16:16 icon-32:32 apple-touch-icon:180 icon-192:192 icon-512:512)
+
+BACKGROUND="transparent"
+
+USAGE="Usage: $0 [-d] [-b COLOR] INPUTFILE [OUTPUTDIR]
+\n
+\nThis tool generates app icons for iOS and Android apps from the SVG file given in INPUTFILE. It is expected that the input file is an SVG with a canvas size of 192×192 with a transparent background. A solid background colour can be added to the output via the --background (-b) option.
+\nIf OUTPUTDIR is not specified, it defaults to a folder named 'out' in the current directory.
+\n
+\nNOTE: This script requires the following tools to be installed and available:
+\n\tInkscape  -- https://inkscape.org/
+\n\tpngquant  -- https://pngquant.org/
+\n\tzopflipng -- https://github.com/google/zopfli
+\n
+\nOptions:
+\n\t-h
+\n\t--help\t\tPrint this message.
+\n
+\n\t-d
+\n\t--debug
+\n\t-v
+\n\t--verbose\tTurn on debugging output.
+\n
+\n\t-b
+\n\t--background\tSet the background colour.
+\n
+\n\t--ios\t\tGenerate iOS icons (default).
+\n\t--no-ios\tDo not generate iOS icons.
+\n
+\n\t--android\tGenerate Android icons (default).
+\n\t--no-android\tDo not generate Android icons."
+
+while getopts ":dhb:-:" opt; do
+    case $opt in
+        b)
+            BACKGROUND=${OPTARG}
+            ;;
+        v)
+            set -x
+            ;;
+        d)
+            set -x
+            ;;
+        h)
+            echo -e $USAGE
+            exit
+            ;;
+        -)
+            case "${OPTARG}" in
+                verbose)
+                    set -x
+                    ;;
+                debug)
+                    set -x
+                    ;;
+                background=*)
+                    BACKGROUND=${OPTARG#*=}
+                    ;;
+                no-ios)
+                    WITH_IOS=0
+                    ;;
+                no-android)
+                    WITH_ANDROID=0
+                    ;;
+                no-web)
+                    WITH_WEB=0
+                    ;;
+                ios)
+                    WITH_IOS=1
+                    ;;
+                android)
+                    WITH_ANDROID=1
+                    ;;
+                web)
+                    WITH_WEB=1
+                    ;;
+                help)
+                    echo -e $USAGE
+                    exit
+                    ;;
+            esac
+            ;;
+    esac
+done
+
+shift "$((OPTIND-1))"
+
+SAVEIFS=$IFS
+
+if [ -z "$1" ]; then
+    echo -e $USAGE
+    exit
+fi
+
+OUTDIR=${2:-out}
+
+# Generate our iOS icons
+if [ $WITH_IOS -ne 0 ]; then
+    mkdir -p $OUTDIR/ios
+    mkdir -p $OUTDIR/tmp
+
+    for size in "${SIZES[@]}"; do
+        IFS=':' read -ra ICON <<< "$size";
+
+        $INKSCAPE -b "${ICON[2]:-$BACKGROUND}" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+
+        pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
+        rm "$OUTDIR/tmp/${ICON[0]}.png"
+        zopflipng -m "$OUTDIR/tmp/${ICON[0]}-fs8.png" "$OUTDIR/ios/${ICON[0]}.png"
+        rm "$OUTDIR/tmp/${ICON[0]}-fs8.png"
+    done
+
+    rmdir $OUTDIR/tmp
+fi
+
+
+# Generate our Android icons
+if [ $WITH_ANDROID -ne 0 ]; then
+    mkdir -p $OUTDIR/android
+    mkdir -p $OUTDIR/tmp
+
+    TEMPLATE_HEAD='<?xml version="1.0" encoding="utf-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 192 192">\n<defs>\n  <clipPath id="androidMask">\n    <rect x="20" y="20" rx="8.33%" ry="8.33%" height="152" width="152"></rect>\n  </clipPath>\n</defs>\n<rect x="0" y="0" height="192" width="192" fill="'"${BACKGROUND}"'" clip-path="url(#androidMask)"/>'
+    TEMPLATE_TAIL='<use xlink:href="#iconize-base" x="20" y="20" width="152" height="152" clip-path="url(#androidMask)"></use>\n</svg>'
+
+    CIRC_TEMPLATE_HEAD='<?xml version="1.0" encoding="utf-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 192 192">\n<defs>\n  <clipPath id="androidMask">\n    <rect x="8" y="8" rx="50%" ry="50%" height="176" width="176"></rect>\n  </clipPath>\n</defs>\n<rect x="0" y="0" height="192" width="192" fill="'"${BACKGROUND}"'" clip-path="url(#androidMask)"/>'
+    CIRC_TEMPLATE_TAIL='<use xlink:href="#iconize-base" x="8" y="8" width="176" height="176" clip-path="url(#androidMask)"></use>\n</svg>'
+
+    echo -e $TEMPLATE_HEAD > $OUTDIR/tmp/android.svg
+    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> $OUTDIR/tmp/android.svg
+    echo -e $TEMPLATE_TAIL >> $OUTDIR/tmp/android.svg
+
+    echo -e $CIRC_TEMPLATE_HEAD > $OUTDIR/tmp/android-round.svg
+    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> $OUTDIR/tmp/android-round.svg
+    echo -e $CIRC_TEMPLATE_TAIL >> $OUTDIR/tmp/android-round.svg
+
+    for size in "${DENSITIES[@]}"; do
+        IFS=':' read -ra ICON <<< "$size";
+
+        $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" $OUTDIR/tmp/android.svg
+        $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}-round.png" $OUTDIR/tmp/android-round.svg
+
+        pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
+        rm "$OUTDIR/tmp/${ICON[0]}.png"
+        zopflipng -m "$OUTDIR/tmp/${ICON[0]}-fs8.png" "$OUTDIR/android/${ICON[0]}.png"
+        rm "$OUTDIR/tmp/${ICON[0]}-fs8.png"
+
+        pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}-round.png"
+        rm "$OUTDIR/tmp/${ICON[0]}-round.png"
+        zopflipng -m "$OUTDIR/tmp/${ICON[0]}-round-fs8.png" "$OUTDIR/android/${ICON[0]}-round.png"
+        rm "$OUTDIR/tmp/${ICON[0]}-round-fs8.png"
+    done
+
+    rm $OUTDIR/tmp/android.svg
+    rm $OUTDIR/tmp/android-round.svg
+    rmdir $OUTDIR/tmp
+fi
+
+
+# TODO: Generate our Web icons
+if [ $WITH_WEB -ne 0 ]; then
+    mkdir -p $OUTDIR/web
+    mkdir -p $OUTDIR/tmp
+
+    rmdir $OUTDIR/tmp
+fi
+
+IFS=$SAVEIFS
