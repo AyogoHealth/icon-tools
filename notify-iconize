@@ -1,0 +1,36 @@
+#!/bin/bash
+# Copyright 2018 Ayogo Health Inc.
+
+INKSCAPE='inkscape'
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    INKSCAPE='/Applications/Inkscape.app/Contents/MacOS/inkscape'
+fi
+
+TEMPLATE='<?xml version="1.0" encoding="utf-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1024"><defs><clipPath id="androidMask"><rect x="0" y="0" rx="8.33%" ry="8.33%" height="1024" width="1024"></rect></clipPath></defs><image x="0" y="0" width="1024" height="1024" xlink:href="%APPICON%" clip-path="url(#androidMask)"></image></svg>'
+DENSITIES=(notification-mdpi:22:24 notification-hdpi:33:36 notification-xhdpi:44:48 notification-xxhdpi:66:72 notification-xxxhdpi:88:96)
+
+SAVEIFS=$IFS
+
+mkdir out
+mkdir out/android
+
+echo $TEMPLATE | sed -e "s/%APPICON%/$1/" > android.svg
+
+for size in "${DENSITIES[@]}"; do
+    IFS=':' read -ra ICON <<< "$size";
+
+    $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "${ICON[0]}-tmp.png" android.svg
+
+    convert "${ICON[0]}-tmp.png" -background transparent -gravity center -scale "${ICON[1]}x${ICON[1]}" -extent "${ICON[2]}x${ICON[2]}" "${ICON[0]}.png"
+    rm "${ICON[0]}-tmp.png"
+
+    pngquant --speed 1 "${ICON[0]}.png"
+    rm "${ICON[0]}.png"
+    zopflipng -m "${ICON[0]}-fs8.png" "out/android/${ICON[0]}.png"
+    rm "${ICON[0]}-fs8.png"
+done
+
+rm android.svg
+
+IFS=$SAVEIFS

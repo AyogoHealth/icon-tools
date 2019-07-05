@@ -22,3 +22,13 @@ This tool generates app icons for iOS and Android apps from the SVG file given i
 If `OUTPUTDIR` is not specified, it defaults to a folder named 'out' in the current directory.
 
 In theory, this script works on both macOS and Linux.
+
+
+`notify-iconize`
+----------------
+
+Usage: `notify-iconize [INPUTFILE]`
+
+This tool generates Android notification icons from the SVG file given in `INPUTFILE`. It is expected that the input file is an SVG with a square canvas size and a transparent background.
+
+In theory, this script works on both macOS and Linux.
