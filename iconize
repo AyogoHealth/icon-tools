@@ -14,9 +14,17 @@ fi
 $INKSCAPE --version | grep -Eq '^Inkscape 0\.'
 VERSION=$?
 
-WITH_ANDROID=1
-WITH_IOS=1
-WITH_WEB=0 # Not implemented yet
+IMAGICK='magick'
+if ! command -v $IMAGICK &> /dev/null
+then
+    IMAGICK='convert'
+fi
+
+
+VERBOSE=false
+WITH_ANDROID=true
+WITH_IOS=true
+WITH_WEB=false
 
 # Icon sizes for iOS
 SIZES=(
@@ -59,7 +67,15 @@ DENSITIES=(
     xxxhdpi:192
 )
 
-#FAVICONS=(icon-16:16 icon-32:32 apple-touch-icon:180 icon-192:192 icon-512:512)
+# Icon sizes for web favicons
+FAVICONS=(
+    icon-16:16
+    icon-32:32
+    icon-48:48
+    icon-192:192
+    icon-512:512
+    apple-touch-icon:180
+)
 
 BACKGROUND="transparent"
 FORCE_BACKGROUND=false
@@ -70,9 +86,10 @@ USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \nIf OUTPUTDIR is not specified, it defaults to a folder named 'out' in the current directory.
 \n
 \nNOTE: This script requires the following tools to be installed and available:
-\n\tInkscape  -- https://inkscape.org/
-\n\tpngquant  -- https://pngquant.org/
-\n\tzopflipng -- https://github.com/google/zopfli
+\n\tInkscape\t-- https://inkscape.org/
+\n\tpngquant\t-- https://pngquant.org/
+\n\tzopflipng\t-- https://github.com/google/zopfli
+\n\tImageMagick\t-- https://imagemagick.org/
 \n
 \nOptions:
 \n\t-h
@@ -92,7 +109,10 @@ USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \n\t--no-ios\tDo not generate iOS icons.
 \n
 \n\t--android\tGenerate Android icons (default).
-\n\t--no-android\tDo not generate Android icons."
+\n\t--no-android\tDo not generate Android icons.
+\n
+\n\t--web\t\tGenerate web favicons.
+\n\t--no-web\tDo not generate web favicons (default)."
 
 while getopts ":dhb:-:" opt; do
     case $opt in
@@ -101,9 +121,11 @@ while getopts ":dhb:-:" opt; do
             ;;
         v)
             set -x
+            VERBOSE=true
             ;;
         d)
             set -x
+            VERBOSE=true
             ;;
         h)
             echo -e $USAGE
@@ -113,9 +135,11 @@ while getopts ":dhb:-:" opt; do
             case "${OPTARG}" in
                 verbose)
                     set -x
+                    VERBOSE=true
                     ;;
                 debug)
                     set -x
+                    VERBOSE=true
                     ;;
                 background=*)
                     BACKGROUND=${OPTARG#*=}
@@ -124,22 +148,22 @@ while getopts ":dhb:-:" opt; do
                     FORCE_BACKGROUND=true
                     ;;
                 no-ios)
-                    WITH_IOS=0
+                    WITH_IOS=false
                     ;;
                 no-android)
-                    WITH_ANDROID=0
+                    WITH_ANDROID=false
                     ;;
                 no-web)
-                    WITH_WEB=0
+                    WITH_WEB=false
                     ;;
                 ios)
-                    WITH_IOS=1
+                    WITH_IOS=true
                     ;;
                 android)
-                    WITH_ANDROID=1
+                    WITH_ANDROID=true
                     ;;
                 web)
-                    WITH_WEB=1
+                    WITH_WEB=true
                     ;;
                 help)
                     echo -e $USAGE
@@ -159,12 +183,31 @@ if [ -z "$1" ]; then
     exit
 fi
 
+checktool() {
+    if ! command -v $@ &> /dev/null
+    then
+        echo "$@ not be found" 1>&2;
+        echo -e $USAGE
+        exit
+    fi
+}
+
+checktool pngquant
+checktool zopflipng
+checktool $INKSCAPE
+checktool $IMAGICK
+
+
+if [ "$VERBOSE" = true ]; then
+    echo "Android: $WITH_ANDROID ; iOS: $WITH_IOS ; web: $WITH_WEB"
+fi
+
 OUTDIR=${2:-out}
 
 # Generate our iOS icons
-if [ $WITH_IOS -ne 0 ]; then
-    mkdir -p $OUTDIR/ios
-    mkdir -p $OUTDIR/tmp
+if [ "$WITH_IOS" = true ]; then
+    mkdir -p "$OUTDIR/ios"
+    mkdir -p "$OUTDIR/tmp"
 
     for size in "${SIZES[@]}"; do
         IFS=':' read -ra ICON <<< "$size";
@@ -174,10 +217,12 @@ if [ $WITH_IOS -ne 0 ]; then
             BGCOL=$BACKGROUND
         fi
 
+        OPACITY=$([[ "$BGCOL" == "transparent" ]] && echo "0.0" || echo "1.0")
+
         if [ $VERSION -eq 0 ]; then
             $INKSCAPE -b "$BGCOL" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
         else
-            $INKSCAPE -b "$BGCOL" -y 1.0 -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            $INKSCAPE -b "$BGCOL" -y $OPACITY -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
         fi
 
         pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
@@ -186,14 +231,14 @@ if [ $WITH_IOS -ne 0 ]; then
         rm "$OUTDIR/tmp/${ICON[0]}-fs8.png"
     done
 
-    rmdir $OUTDIR/tmp
+    rmdir "$OUTDIR/tmp"
 fi
 
 
 # Generate our Android icons
-if [ $WITH_ANDROID -ne 0 ]; then
-    mkdir -p $OUTDIR/android
-    mkdir -p $OUTDIR/tmp
+if [ "$WITH_ANDROID" = true ]; then
+    mkdir -p "$OUTDIR/android"
+    mkdir -p "$OUTDIR/tmp"
 
     TEMPLATE_HEAD='<?xml version="1.0" encoding="utf-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 192 192">\n<defs>\n  <clipPath id="androidMask">\n    <rect x="20" y="20" rx="12" ry="12" height="152" width="152"></rect>\n  </clipPath>\n</defs>\n<rect x="0" y="0" height="192" width="192" fill="'"${BACKGROUND}"'" clip-path="url(#androidMask)"/>'
     TEMPLATE_TAIL='<use xlink:href="#iconize-base" x="20" y="20" width="152" height="152" clip-path="url(#androidMask)"></use>\n</svg>'
@@ -204,23 +249,23 @@ if [ $WITH_ANDROID -ne 0 ]; then
     STORE_TEMPLATE_HEAD='<?xml version="1.0" encoding="utf-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 192 192">\n<rect x="0" y="0" height="192" width="192" fill="'"${BACKGROUND}"'" />'
     STORE_TEMPLATE_TAIL='<use xlink:href="#iconize-base" x="20" y="20" width="152" height="152" clip-path="url(#androidMask)"></use>\n</svg>'
 
-    echo -e $TEMPLATE_HEAD > $OUTDIR/tmp/android.svg
-    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> $OUTDIR/tmp/android.svg
-    echo -e $TEMPLATE_TAIL >> $OUTDIR/tmp/android.svg
+    echo -e $TEMPLATE_HEAD > "$OUTDIR/tmp/android.svg"
+    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> "$OUTDIR/tmp/android.svg"
+    echo -e $TEMPLATE_TAIL >> "$OUTDIR/tmp/android.svg"
 
-    echo -e $CIRC_TEMPLATE_HEAD > $OUTDIR/tmp/android-round.svg
-    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> $OUTDIR/tmp/android-round.svg
-    echo -e $CIRC_TEMPLATE_TAIL >> $OUTDIR/tmp/android-round.svg
+    echo -e $CIRC_TEMPLATE_HEAD > "$OUTDIR/tmp/android-round.svg"
+    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> "$OUTDIR/tmp/android-round.svg"
+    echo -e $CIRC_TEMPLATE_TAIL >> "$OUTDIR/tmp/android-round.svg"
 
     for size in "${DENSITIES[@]}"; do
         IFS=':' read -ra ICON <<< "$size";
 
         if [ $VERSION -eq 0 ]; then
-            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" $OUTDIR/tmp/android.svg
-            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}-round.png" $OUTDIR/tmp/android-round.svg
+            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$OUTDIR/tmp/android.svg"
+            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}-round.png" "$OUTDIR/tmp/android-round.svg"
         else
-            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" $OUTDIR/tmp/android.svg
-            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}-round.png" $OUTDIR/tmp/android-round.svg
+            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$OUTDIR/tmp/android.svg"
+            $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}-round.png" "$OUTDIR/tmp/android-round.svg"
         fi
 
         mkdir -p "$OUTDIR/android/mipmap-${ICON[0]}"
@@ -238,14 +283,14 @@ if [ $WITH_ANDROID -ne 0 ]; then
 
 
     # Store Icon: No transparency, no rounded corners
-    echo -e $STORE_TEMPLATE_HEAD > $OUTDIR/tmp/android.svg
-    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> $OUTDIR/tmp/android.svg
-    echo -e $STORE_TEMPLATE_TAIL >> $OUTDIR/tmp/android.svg
+    echo -e $STORE_TEMPLATE_HEAD > "$OUTDIR/tmp/android.svg"
+    sed -e 's/<\?xml.*\?>//' -e 's/<svg/<symbol id="iconize-base"/' -e 's/ *xmlns="[^\"]*"//' -e 's/<\/svg/<\/symbol/' $1 >> "$OUTDIR/tmp/android.svg"
+    echo -e $STORE_TEMPLATE_TAIL >> "$OUTDIR/tmp/android.svg"
 
     if [ $VERSION -eq 0 ]; then
-        $INKSCAPE -h "512" -w "512" -e "$OUTDIR/tmp/store.png" $OUTDIR/tmp/android.svg
+        $INKSCAPE -h "512" -w "512" -e "$OUTDIR/tmp/store.png" "$OUTDIR/tmp/android.svg"
     else
-        $INKSCAPE -h "512" -w "512" -o "$OUTDIR/tmp/store.png" $OUTDIR/tmp/android.svg
+        $INKSCAPE -h "512" -w "512" -o "$OUTDIR/tmp/store.png" "$OUTDIR/tmp/android.svg"
     fi
 
     pngquant --strip --speed 1 "$OUTDIR/tmp/store.png"
@@ -254,18 +299,40 @@ if [ $WITH_ANDROID -ne 0 ]; then
     rm "$OUTDIR/tmp/store-fs8.png"
     # End Store Icon
 
-    rm $OUTDIR/tmp/android.svg
-    rm $OUTDIR/tmp/android-round.svg
-    rmdir $OUTDIR/tmp
+    rm "$OUTDIR/tmp/android.svg"
+    rm "$OUTDIR/tmp/android-round.svg"
+    rmdir "$OUTDIR/tmp"
 fi
 
 
-# TODO: Generate our Web icons
-if [ $WITH_WEB -ne 0 ]; then
-    mkdir -p $OUTDIR/web
-    mkdir -p $OUTDIR/tmp
+# Generate web favicons
+if [ "$WITH_WEB" = true ]; then
+    mkdir -p "$OUTDIR/web"
+    mkdir -p "$OUTDIR/tmp"
 
-    rmdir $OUTDIR/tmp
+    OPACITY=$([[ "$BACKGROUND" == "transparent" ]] && echo "0.0" || echo "1.0")
+
+    for size in "${FAVICONS[@]}"; do
+        IFS=':' read -ra ICON <<< "$size";
+
+        if [ $VERSION -eq 0 ]; then
+            $INKSCAPE -b "$BACKGROUND" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+        else
+            $INKSCAPE -b "$BACKGROUND" -y $OPACITY -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+        fi
+
+        pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
+        rm "$OUTDIR/tmp/${ICON[0]}.png"
+        zopflipng -m "$OUTDIR/tmp/${ICON[0]}-fs8.png" "$OUTDIR/web/${ICON[0]}.png"
+        rm "$OUTDIR/tmp/${ICON[0]}-fs8.png"
+    done
+
+    $IMAGICK "$OUTDIR/web/icon-16.png" "$OUTDIR/web/icon-32.png" "$OUTDIR/web/icon-48.png" -colors 256 "$OUTDIR/web/favicon.ico"
+    rm "$OUTDIR/web/icon-16.png"
+    rm "$OUTDIR/web/icon-32.png"
+    rm "$OUTDIR/web/icon-48.png"
+
+    rmdir "$OUTDIR/tmp"
 fi
 
 IFS=$SAVEIFS
