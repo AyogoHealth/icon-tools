@@ -327,6 +327,7 @@ if [ "$WITH_WEB" = true ]; then
         rm "$OUTDIR/tmp/${ICON[0]}-fs8.png"
     done
 
+    cp "$1" "$OUTDIR/web/favicon.svg"
     $IMAGICK "$OUTDIR/web/icon-16.png" "$OUTDIR/web/icon-32.png" "$OUTDIR/web/icon-48.png" -colors 256 "$OUTDIR/web/favicon.ico"
     rm "$OUTDIR/web/icon-16.png"
     rm "$OUTDIR/web/icon-32.png"
