@@ -70,9 +70,9 @@ DENSITIES=(
 
 # Icon sizes for web favicons
 FAVICONS=(
-    icon-16:16
-    icon-32:32
-    icon-48:48
+    icon-16:16:transparent
+    icon-32:32:transparent
+    icon-48:48:transparent
     icon-192:192
     icon-512:512
     apple-touch-icon:180
@@ -313,15 +313,20 @@ if [ "$WITH_WEB" = true ]; then
     mkdir -p "$OUTDIR/web"
     mkdir -p "$OUTDIR/tmp"
 
-    OPACITY=$([[ "$BACKGROUND" == "transparent" ]] && echo "0.0" || echo "1.0")
-
     for size in "${FAVICONS[@]}"; do
         IFS=':' read -ra ICON <<< "$size";
 
+        BGCOL="${ICON[2]:-$BACKGROUND}"
+        if [ "$FORCE_BACKGROUND" = true ]; then
+            BGCOL=$BACKGROUND
+        fi
+
+        OPACITY=$([[ "$BGCOL" == "transparent" ]] && echo "0.0" || echo "1.0")
+
         if [ $VERSION -eq 0 ]; then
-            $INKSCAPE -b "$BACKGROUND" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            $INKSCAPE -b "$BGCOL" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
         else
-            $INKSCAPE -b "$BACKGROUND" -y $OPACITY -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            $INKSCAPE -b "$BGCOL" -y $OPACITY -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
         fi
 
         pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
