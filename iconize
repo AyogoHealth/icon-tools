@@ -23,6 +23,7 @@ fi
 
 VERBOSE=false
 WITH_ANDROID=true
+WITH_ANDROID_VECTOR=true
 WITH_IOS=true
 WITH_WEB=false
 ANDROID_STORE_ONLY=false
@@ -91,6 +92,9 @@ USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \n\tpngquant\t-- https://pngquant.org/
 \n\tzopflipng\t-- https://github.com/google/zopfli
 \n\tImageMagick\t-- https://imagemagick.org/
+\n\tlibxml2\t-- http://xmlsoft.org/
+\n\tnpm\t\t-- https://npmjs.org/
+\n\tjava\t\t-- https://java.com/
 \n
 \nOptions:
 \n\t-h
@@ -111,6 +115,7 @@ USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \n
 \n\t--android\tGenerate Android icons (default).
 \n\t--no-android\tDo not generate Android icons.
+\n\t--no-vector\tDo not generate Android adaptive vector icons.
 \n
 \n\t--store-only\tOnly generate the Android store icon.
 \n
@@ -155,6 +160,9 @@ while getopts ":dhb:-:" opt; do
                     ;;
                 no-android)
                     WITH_ANDROID=false
+                    ;;
+                no-vector)
+                    WITH_ANDROID_VECTOR=false
                     ;;
                 no-web)
                     WITH_WEB=false
@@ -202,10 +210,12 @@ checktool pngquant
 checktool zopflipng
 checktool $INKSCAPE
 checktool $IMAGICK
+checktool xmllint
+checktool npx
 
 
 if [ "$VERBOSE" = true ]; then
-    echo "Android: $WITH_ANDROID ; iOS: $WITH_IOS ; web: $WITH_WEB"
+    echo "Android: $WITH_ANDROID ( vector: $WITH_ANDROID_VECTOR , skiplegacy: $STORE_ONLY ); iOS: $WITH_IOS ; web: $WITH_WEB"
 fi
 
 OUTDIR=${2:-out}
@@ -289,6 +299,26 @@ if [ "$WITH_ANDROID" = true ]; then
         rm "$OUTDIR/tmp/android-round.svg"
     fi
 
+    if [ "$WITH_ANDROID_VECTOR" = true ]; then
+        # We need to convert the SVG into an Android VectorDrawable
+        # Android Studio has a tool for this, which someone repackaged on npm. It requires Java.
+        #
+        # But first, we actually need to manipulate our SVG to add the right amount of padding...
+        #
+        # This is where it gets very hacky:
+        # Our original viewBox needs to be scaled such that it fills 72dp centered in a 108dp frame.
+        # We use xmllint to extract the viewBox values from the original SVG, then use awk to parse and recalculate the offsets and dimensions, and finally use sed to adjust a copy of the original SVG
+        #
+        # Believe it or not, I had this as a one-liner (it was terrible) but I have graciously split it up here for easier reading :P
+        OLD_VIEWBOX=$(xmllint --xpath 'string(//@viewBox)' "$1")
+        NEW_VIEWBOX=$(echo $OLD_VIEWBOX | awk -F' ' '{ print (int($1) - ((int($3) * 108/72 - int($3)) / 2)) " " (int($2) - ((int($4) * 108/72 - int($4)) / 2)) " " (int($3) * 108/72) " " (int($4) * 108/72) }')
+        sed -e "s/viewBox=\"$OLD_VIEWBOX\"/viewBox=\"$NEW_VIEWBOX\"/" "$1" > "$OUTDIR/tmp/ic_launcher_foreground.svg"
+
+        mkdir -p "$OUTDIR/android/drawable-v24"
+        npx -y vd-tool -c -in "$OUTDIR/tmp/vector-drawable.svg" -widthDp 108 -heightDp 108 -out "$OUTDIR/android/drawable-v24/"
+
+        rm "$OUTDIR/tmp/ic_launcher_foreground.svg"
+    fi
 
     # Store Icon: No transparency, no rounded corners
     BGCOL="${BACKGROUND:-white}"
