@@ -24,9 +24,9 @@ fi
 VERBOSE=false
 WITH_ANDROID=true
 WITH_ANDROID_VECTOR=true
+WITH_ANDROID_LEGACY=false
 WITH_IOS=true
 WITH_WEB=false
-ANDROID_STORE_ONLY=false
 
 # Icon sizes for iOS
 SIZES=(
@@ -84,7 +84,7 @@ FORCE_BACKGROUND=false
 
 USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \n
-\nThis tool generates app icons for iOS and Android apps from the SVG file given in INPUTFILE. It is expected that the input file is an SVG with a canvas size of 192×192 with a transparent background. A solid background colour can be added to the output via the --background (-b) option.
+\nThis tool generates app icons for iOS and Android apps from the SVG file given in INPUTFILE. It is expected that the input file is an SVG with a square canvas size and a transparent background. A solid background colour can be added to the output via the --background (-b) option.
 \nIf OUTPUTDIR is not specified, it defaults to a folder named 'out' in the current directory.
 \n
 \nNOTE: This script requires the following tools to be installed and available:
@@ -92,7 +92,7 @@ USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \n\tpngquant\t-- https://pngquant.org/
 \n\tzopflipng\t-- https://github.com/google/zopfli
 \n\tImageMagick\t-- https://imagemagick.org/
-\n\tlibxml2\t-- http://xmlsoft.org/
+\n\tlibxml2\t\t-- http://xmlsoft.org/
 \n\tnpm\t\t-- https://npmjs.org/
 \n\tjava\t\t-- https://java.com/
 \n
@@ -116,8 +116,7 @@ USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \n\t--android\tGenerate Android icons (default).
 \n\t--no-android\tDo not generate Android icons.
 \n\t--no-vector\tDo not generate Android adaptive vector icons.
-\n
-\n\t--store-only\tOnly generate the Android store icon.
+\n\t--android-old\tGenerate mipmap icons for older Android versions.
 \n
 \n\t--web\t\tGenerate web favicons.
 \n\t--no-web\tDo not generate web favicons (default)."
@@ -160,6 +159,8 @@ while getopts ":dhb:-:" opt; do
                     ;;
                 no-android)
                     WITH_ANDROID=false
+                    WITH_ANDROID_LEGACY=false
+                    WITH_ANDROID_VECTOR=false
                     ;;
                 no-vector)
                     WITH_ANDROID_VECTOR=false
@@ -173,11 +174,11 @@ while getopts ":dhb:-:" opt; do
                 android)
                     WITH_ANDROID=true
                     ;;
+                android-old)
+                    WITH_ANDROID_LEGACY=true
+                    ;;
                 web)
                     WITH_WEB=true
-                    ;;
-                store-only)
-                    ANDROID_STORE_ONLY=true
                     ;;
                 help)
                     echo -e $USAGE
@@ -215,7 +216,7 @@ checktool npx
 
 
 if [ "$VERBOSE" = true ]; then
-    echo "Android: $WITH_ANDROID ( vector: $WITH_ANDROID_VECTOR , skiplegacy: $STORE_ONLY ); iOS: $WITH_IOS ; web: $WITH_WEB"
+    echo "Android: $WITH_ANDROID ( vector: $WITH_ANDROID_VECTOR , legacy: $WITH_ANDROID_LEGACY ); iOS: $WITH_IOS ; web: $WITH_WEB"
 fi
 
 OUTDIR=${2:-out}
@@ -256,7 +257,7 @@ if [ "$WITH_ANDROID" = true ]; then
     mkdir -p "$OUTDIR/android"
     mkdir -p "$OUTDIR/tmp"
 
-    if [ "$ANDROID_STORE_ONLY" = false ]; then
+    if [ "$WITH_ANDROID_LEGACY" = true ]; then
         TEMPLATE_HEAD='<?xml version="1.0" encoding="utf-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 192 192">\n<defs>\n  <clipPath id="androidMask">\n    <rect x="20" y="20" rx="12" ry="12" height="152" width="152"></rect>\n  </clipPath>\n</defs>\n<rect x="0" y="0" height="192" width="192" fill="'"${BACKGROUND}"'" clip-path="url(#androidMask)"/>'
         TEMPLATE_TAIL='<use xlink:href="#iconize-base" x="20" y="20" width="152" height="152" clip-path="url(#androidMask)"></use>\n</svg>'
 
