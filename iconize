@@ -316,7 +316,7 @@ if [ "$WITH_ANDROID" = true ]; then
         sed -e "s/viewBox=\"$OLD_VIEWBOX\"/viewBox=\"$NEW_VIEWBOX\"/" "$1" > "$OUTDIR/tmp/ic_launcher_foreground.svg"
 
         mkdir -p "$OUTDIR/android/drawable-v24"
-        npx -y vd-tool -c -in "$OUTDIR/tmp/vector-drawable.svg" -widthDp 108 -heightDp 108 -out "$OUTDIR/android/drawable-v24/"
+        npx -y vd-tool -c -in "$OUTDIR/tmp/ic_launcher_foreground.svg" -widthDp 108 -heightDp 108 -out "$OUTDIR/android/drawable-v24/"
 
         rm "$OUTDIR/tmp/ic_launcher_foreground.svg"
     fi
