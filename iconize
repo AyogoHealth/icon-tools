@@ -324,7 +324,11 @@ if [ "$WITH_WEB" = true ]; then
         OPACITY=$([[ "$BGCOL" == "transparent" ]] && echo "0.0" || echo "1.0")
 
         if [ $VERSION -eq 0 ]; then
-            $INKSCAPE -b "$BGCOL" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            if [ "$BGCOL" == "transparent" ]; then
+                $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            else
+                $INKSCAPE -b "$BGCOL" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            fi
         else
             $INKSCAPE -b "$BGCOL" -y $OPACITY -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
         fi
