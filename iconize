@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2018 Ayogo Health Inc.
+# Copyright 2018 - 2023 Ayogo Health Inc.
 
 INKSCAPE='inkscape'
 
@@ -26,6 +26,7 @@ WITH_ANDROID=true
 WITH_ANDROID_VECTOR=true
 WITH_ANDROID_LEGACY=false
 WITH_IOS=true
+WITH_IOS_LEGACY=false
 WITH_WEB=false
 
 # Icon sizes for iOS
@@ -112,6 +113,7 @@ USAGE="Usage: $0 [-d] [-b COLOR] [--force-bg] INPUTFILE [OUTPUTDIR]
 \n
 \n\t--ios\t\tGenerate iOS icons (default).
 \n\t--no-ios\tDo not generate iOS icons.
+\n\t--ios-old\tGenerate all icon sizes for older Xcode versions.
 \n
 \n\t--android\tGenerate Android icons (default).
 \n\t--no-android\tDo not generate Android icons.
@@ -156,6 +158,7 @@ while getopts ":dhb:-:" opt; do
                     ;;
                 no-ios)
                     WITH_IOS=false
+                    WITH_IOS_LEGACY=false
                     ;;
                 no-android)
                     WITH_ANDROID=false
@@ -170,6 +173,9 @@ while getopts ":dhb:-:" opt; do
                     ;;
                 ios)
                     WITH_IOS=true
+                    ;;
+                ios-old)
+                    WITH_IOS_LEGACY=true
                     ;;
                 android)
                     WITH_ANDROID=true
@@ -216,7 +222,7 @@ checktool npx
 
 
 if [ "$VERBOSE" = true ]; then
-    echo "Android: $WITH_ANDROID ( vector: $WITH_ANDROID_VECTOR , legacy: $WITH_ANDROID_LEGACY ); iOS: $WITH_IOS ; web: $WITH_WEB"
+    echo "Android: $WITH_ANDROID ( vector: $WITH_ANDROID_VECTOR , legacy: $WITH_ANDROID_LEGACY ); iOS: $WITH_IOS ( legacy: $WITH_IOS_LEGACY ); web: $WITH_WEB"
 fi
 
 OUTDIR=${2:-out}
@@ -226,27 +232,42 @@ if [ "$WITH_IOS" = true ]; then
     mkdir -p "$OUTDIR/ios"
     mkdir -p "$OUTDIR/tmp"
 
-    for size in "${SIZES[@]}"; do
-        IFS=':' read -ra ICON <<< "$size";
+    if [ "$WITH_IOS_LEGACY" = true ]; then
+        for size in "${SIZES[@]}"; do
+            IFS=':' read -ra ICON <<< "$size";
 
-        BGCOL="${ICON[2]:-$BACKGROUND}"
-        if [ "$FORCE_BACKGROUND" = true ]; then
-            BGCOL=$BACKGROUND
-        fi
+            BGCOL="${ICON[2]:-$BACKGROUND}"
+            if [ "$FORCE_BACKGROUND" = true ]; then
+                BGCOL=$BACKGROUND
+            fi
 
-        OPACITY=$([[ "$BGCOL" == "transparent" ]] && echo "0.0" || echo "1.0")
+            OPACITY=$([[ "$BGCOL" == "transparent" ]] && echo "0.0" || echo "1.0")
 
+            if [ $VERSION -eq 0 ]; then
+                $INKSCAPE -b "$BGCOL" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            else
+                $INKSCAPE -b "$BGCOL" -y $OPACITY -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            fi
+
+            pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
+            rm "$OUTDIR/tmp/${ICON[0]}.png"
+            zopflipng -m "$OUTDIR/tmp/${ICON[0]}-fs8.png" "$OUTDIR/ios/${ICON[0]}.png"
+            rm "$OUTDIR/tmp/${ICON[0]}-fs8.png"
+        done
+    else
+        # We can generate just a single 1024x1024 icon
+        BGCOL="${BACKGROUND:-white}"
         if [ $VERSION -eq 0 ]; then
-            $INKSCAPE -b "$BGCOL" -h "${ICON[1]}" -w "${ICON[1]}" -e "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            $INKSCAPE -b "$BGCOL" -h "1024" -w "1024" -e "$OUTDIR/tmp/icon.png" "$1"
         else
-            $INKSCAPE -b "$BGCOL" -y $OPACITY -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}.png" "$1"
+            $INKSCAPE -b "$BGCOL" -y "1.0" -h "1024" -w "1024" -o "$OUTDIR/tmp/icon.png" "$1"
         fi
 
-        pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
-        rm "$OUTDIR/tmp/${ICON[0]}.png"
-        zopflipng -m "$OUTDIR/tmp/${ICON[0]}-fs8.png" "$OUTDIR/ios/${ICON[0]}.png"
-        rm "$OUTDIR/tmp/${ICON[0]}-fs8.png"
-    done
+        pngquant --strip --speed 1 "$OUTDIR/tmp/icon.png"
+        rm "$OUTDIR/tmp/icon.png"
+        zopflipng -m "$OUTDIR/tmp/icon-fs8.png" "$OUTDIR/ios/icon.png"
+        rm "$OUTDIR/tmp/icon-fs8.png"
+    fi
 
     rmdir "$OUTDIR/tmp"
 fi
