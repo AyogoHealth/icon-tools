@@ -32,6 +32,26 @@ fi
 $INKSCAPE --version | grep -Eq '^Inkscape 0\.'
 VERSION=$?
 
+IMAGICK='magick'
+if ! command -v $IMAGICK &> /dev/null
+then
+    IMAGICK='convert'
+fi
+
+checktool() {
+    if ! command -v $@ &> /dev/null
+    then
+        echo "$@ not be found" 1>&2;
+        echo -e $USAGE
+        exit
+    fi
+}
+
+checktool pngquant
+checktool zopflipng
+checktool $INKSCAPE
+checktool $IMAGICK
+
 BACKGROUND="transparent"
 DENSITIES=(notification-mdpi:22:24 notification-hdpi:33:36 notification-xhdpi:44:48 notification-xxhdpi:66:72 notification-xxxhdpi:88:96)
 
@@ -50,7 +70,7 @@ for size in "${DENSITIES[@]}"; do
         $INKSCAPE -h "${ICON[1]}" -w "${ICON[1]}" -o "$OUTDIR/tmp/${ICON[0]}-orig.png" "$1"
     fi
 
-    convert "$OUTDIR/tmp/${ICON[0]}-orig.png" -background "$BACKGROUND" -gravity center -scale "${ICON[1]}x${ICON[1]}" -extent "${ICON[2]}x${ICON[2]}" "$OUTDIR/tmp/${ICON[0]}.png"
+    $IMAGICK "$OUTDIR/tmp/${ICON[0]}-orig.png" -background "$BACKGROUND" -gravity center -scale "${ICON[1]}x${ICON[1]}" -extent "${ICON[2]}x${ICON[2]}" "$OUTDIR/tmp/${ICON[0]}.png"
     rm "$OUTDIR/tmp/${ICON[0]}-orig.png"
 
     pngquant --strip --speed 1 "$OUTDIR/tmp/${ICON[0]}.png"
